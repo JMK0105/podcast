@@ -1,215 +1,66 @@
 import streamlit as st
-import openai
+import datetime
 from gtts import gTTS
-import tempfile
-import os
-from pydrive2.auth import GoogleAuth
-from pydrive2.drive import GoogleDrive
-from datetime import datetime, timedelta
-import json
+from io import BytesIO
+from auth_drive import authenticate_and_get_service
+from drive_handler import get_week_folder_file, extract_text_from_file
+from gpt_brief import generate_briefing
+from audio_utils import play_audio
 
-# ------------------------
-# Google Drive 연동
-# ------------------------
-def authenticate_drive():
-    gauth = GoogleAuth()
-    gauth.LocalWebserverAuth()
-    return GoogleDrive(gauth)
+# ------------------- 기본 설정 ------------------- #
+st.set_page_config(page_title="📚 데일리 예습 브리핑", layout="wide")
+st.title("🎧 수업 예습 자동 브리핑 시스템")
 
-drive = authenticate_drive()
-
-# ------------------------
-# 강의명 ↔ 폴더 ID 매핑
-# ------------------------
-course_folder_map = {
-    "교육공학개론": "1AbcDefGhIjKlmNopQ",  # 실제 폴더 ID로 대체 필요
-    "심리학입문": "1ZyxWvuTsrqPonmLk"
-}
-
-# ------------------------
-# 주차 자동 인식 로직
-# ------------------------
-def get_current_week():
-    semester_start = datetime(datetime.now().year, 3, 1)
-    today = datetime.now()
-    week_number = ((today - semester_start).days // 7) + 1
-    return max(1, week_number)
-
-# ------------------------
-# 드라이브 폴더 탐색 및 파일 불러오기
-# ------------------------
-def list_week_folders(course_folder_id):
-    file_list = drive.ListFile({
-        'q': f"'{course_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-    }).GetList()
-    week_folders = sorted(file_list, key=lambda x: x['title'])
-    return [(f['title'], f['id']) for f in week_folders]
-
-def get_txt_file_from_folder(folder_id):
-    file_list = drive.ListFile({
-        'q': f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false"
-    }).GetList()
-    for f in file_list:
-        if f['title'].endswith('.txt'):
-            file = drive.CreateFile({'id': f['id']})
-            file.GetContentFile(f['title'])
-            with open(f['title'], 'r', encoding='utf-8') as ftxt:
-                content = ftxt.read()
-            os.remove(f['title'])
-            return content
-    return ""
-
-# ------------------------
-# 학습 이력 저장 및 회고 분석 기반 스타일 튜닝
-# ------------------------
-def save_learning_log(name, week, briefing_type, feedback, reflection):
-    log = {
-        "user": name,
-        "week": week,
-        "type": briefing_type,
-        "feedback": feedback,
-        "reflection": reflection,
-        "timestamp": datetime.now().isoformat()
-    }
-    os.makedirs("logs", exist_ok=True)
-    with open(f"logs/{name}_log.json", "a", encoding="utf-8") as f:
-        f.write(json.dumps(log, ensure_ascii=False) + "\n")
-
-def suggest_style_update(reflection, feedback, api_key):
-    openai.api_key = api_key
-    prompt = f"""
-    아래는 학습자의 회고와 브리핑에 대한 피드백입니다.
-
-    회고 내용: {reflection}
-    피드백: {feedback}
-
-    학습자의 표현 방식, 내용 선호도, 어조 등을 분석해서
-    다음 브리핑에 추천할 스타일을 예측해줘.
-    예시 형태로 다음과 같이 답해줘:
-
-    예습 스타일 추천: 예시 중심
-    복습 스타일 추천: 질문 중심
-    톤 추천: 따뜻하고 격려
-    유형 분석: 설명보다 예시를 좋아하고, 생각할 질문을 주는 걸 선호함.
-    """
-    res = openai.ChatCompletion.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "너는 학습자의 회고와 피드백을 분석해 학습 스타일을 추천하는 조력자야."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-    return res.choices[0].message.content.strip()
-
-# ------------------------
-# 초기 세팅
-# ------------------------
-if "profile" not in st.session_state:
-    st.session_state["profile"] = {}
-if "feedback_history" not in st.session_state:
-    st.session_state["feedback_history"] = []
-
-# ------------------------
-# 사이드바: 학습자 정보
-# ------------------------
+# ------------------- 사용자 입력 ------------------- #
 with st.sidebar:
-    st.header("👩‍🏫 학습자 정보")
-    name = st.text_input("이름", value="민경")
-    grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년"])
-    major = st.text_input("전공", value="교육공학")
+    st.header("👤 사용자 정보")
+    user_name = st.text_input("이름")
+    user_grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년"])
+    user_major = st.text_input("전공")
 
-# ------------------------
-# 진단
-# ------------------------
-st.title("🎧 PrePostCast: 예습/복습 AI 브리핑")
-
-if "initialized" not in st.session_state:
-    st.session_state["profile"] = {
-        "name": name,
-        "grade": grade,
-        "major": major
+    st.markdown("---")
+    st.header("📆 수업 정보")
+    selected_course = st.selectbox("수업명", ["교육공학", "심리학입문"])  # 예시
+    course_schedule = {
+        "교육공학": {"요일": ["화요일", "목요일"], "folder_id": "1AbcDxxx..."},
+        "심리학입문": {"요일": ["수요일"], "folder_id": "1ZyxWxxx..."},
     }
-    st.session_state["initialized"] = True
-    st.success("학습자 정보가 저장되었습니다!")
 
-# ------------------------
-# 브리핑 섹션
-# ------------------------
-if st.session_state.get("initialized"):
-    st.subheader("📁 강의명 선택 및 수업자료 자동 불러오기")
-    course_name = st.selectbox("강의명", list(course_folder_map.keys()))
-    course_folder_id = course_folder_map[course_name]
+# ------------------- 오늘 수업인지 확인 ------------------- #
+today = datetime.datetime.today()
+today_weekday = today.strftime('%A')  # 'Tuesday', 'Wednesday' 등 영어 요일
+korean_weekday = {
+    'Monday': '월요일', 'Tuesday': '화요일', 'Wednesday': '수요일',
+    'Thursday': '목요일', 'Friday': '금요일', 'Saturday': '토요일', 'Sunday': '일요일'
+}[today_weekday]
 
-    week_folders = list_week_folders(course_folder_id)
-    current_week = get_current_week()
-    default_index = min(current_week - 1, len(week_folders) - 1)
-    week_options = [f"{i+1}주차 - {title}" for i, (title, _) in enumerate(week_folders)]
-    selected_index = st.selectbox("주차 선택", range(len(week_options)), format_func=lambda i: week_options[i], index=default_index)
-    selected_folder_id = week_folders[selected_index][1]
-    content = get_txt_file_from_folder(selected_folder_id)
+course_info = course_schedule[selected_course]
 
-    briefing_type = st.radio("브리핑 종류 선택", ["예습", "복습"])
-    openai_api_key = st.text_input("🔑 OpenAI API Key", type="password")
+if korean_weekday in course_info["요일"]:
+    st.success(f"오늘은 📘 {selected_course} 수업이 있는 날입니다. 예습 브리핑을 생성합니다!")
 
-    if content and openai_api_key:
+    # ------------------- Google Drive 연동 ------------------- #
+    service = authenticate_and_get_service()
+    file = get_week_folder_file(service, course_info["folder_id"], today)
 
-        def make_prompt(profile, briefing_type, content):
-            return f"""
-            너는 '{profile['name']}'이라는 학습자를 위한 AI 학습 도우미야.
-            학습자의 정보는 다음과 같아:
-            - 학년: {profile['grade']}
-            - 전공: {profile['major']}
+    if file:
+        with st.spinner("강의자료 불러오는 중..."):
+            text = extract_text_from_file(service, file)
+            if text:
+                with st.spinner("GPT로 예습 요약 중..."):
+                    briefing = generate_briefing(text, selected_course)
+                    st.subheader("📜 브리핑 스크립트")
+                    st.markdown(briefing)
 
-            아래는 수업자료야. {briefing_type} 목적에 맞게 스크립트를 구성해줘.
-            친근한 말투로 구성하고, 마지막엔 간단한 질문 하나 넣어줘.
-
-            수업자료:
-            {content}
-            """
-
-        def ask_gpt(prompt, api_key):
-            openai.api_key = api_key
-            res = openai.ChatCompletion.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "너는 학습자 맞춤 브리핑을 제공하는 AI야."},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            return res.choices[0].message.content.strip()
-
-        def text_to_audio(text):
-            tts = gTTS(text, lang="ko")
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-            tts.save(temp_file.name)
-            return temp_file.name
-
-        if st.button("🎙️ 브리핑 생성"):
-            with st.spinner("브리핑을 생성 중입니다..."):
-                user_profile = st.session_state["profile"]
-                prompt = make_prompt(user_profile, briefing_type, content)
-                summary = ask_gpt(prompt, openai_api_key)
-                audio_path = text_to_audio(summary)
-
-                st.markdown("### 🗒️ 브리핑 스크립트")
-                st.write(summary)
-
-                st.markdown("### 🎧 오디오 브리핑")
-                audio_file = open(audio_path, "rb")
-                st.audio(audio_file.read(), format="audio/mp3")
-                audio_file.close()
-                os.remove(audio_path)
-
-                st.markdown("### 🤔 어땠나요?")
-                feedback = st.radio("브리핑에 대한 느낌을 알려주세요", ["좋았어요", "조금 어려웠어요", "스타일을 바꾸고 싶어요"])
-                reflection = st.text_area("오늘 학습에서 가장 기억에 남는 내용은 무엇인가요?", "")
-
-                st.session_state["feedback_history"].append(feedback)
-                save_learning_log(user_profile['name'], selected_index + 1, briefing_type, feedback, reflection)
-
-                st.success("피드백과 회고가 저장되었습니다. 다음 브리핑에 반영할게요!")
-
-                if reflection and openai_api_key:
-                    st.markdown("### 🧠 스타일 추천 분석")
-                    suggestion = suggest_style_update(reflection, feedback, openai_api_key)
-                    st.info(suggestion)
+                    with st.spinner("🎧 오디오 생성 중..."):
+                        tts = gTTS(briefing, lang='ko')
+                        mp3_fp = BytesIO()
+                        tts.write_to_fp(mp3_fp)
+                        mp3_fp.seek(0)
+                        st.audio(mp3_fp.read(), format='audio/mp3')
+            else:
+                st.warning("📄 강의자료에서 텍스트를 추출할 수 없습니다.")
+    else:
+        st.warning("📁 오늘 주차에 해당하는 강의자료를 찾을 수 없습니다.")
+else:
+    st.info(f"오늘은 {selected_course} 수업이 없는 날입니다.")
