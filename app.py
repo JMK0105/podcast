@@ -1,4 +1,4 @@
-# app.py (과목 선택 포함 리팩터링)
+# app.py (과목 선택 + 디버깅 포함 리팩터링)
 
 import streamlit as st
 from datetime import datetime
@@ -36,15 +36,6 @@ folder_id = course_options[course_name]
 semester_start = datetime.strptime(st.secrets["semester_start"], "%Y-%m-%d").date()
 key_dict = json.loads(st.secrets["gcp_tts_key"])
 
-with st.expander("📁 폴더 내부 확인"):
-    result = drive_service.files().list(
-        q=f"'{folder_id}' in parents and trashed = false",
-        fields="files(id, name, mimeType)"
-    ).execute()
-    for f in result.get("files", []):
-        st.write(f["name"], f["mimeType"])
-
-
 # ──────────────────────────────────────────────────────────────
 # 3. 주차 계산 및 Drive 텍스트 추출
 # ──────────────────────────────────────────────────────────────
@@ -55,6 +46,17 @@ st.info(f"📅 오늘은 {today.strftime('%Y-%m-%d')} / 학기 {week_no}주차�
 
 with st.spinner("📂 강의자료를 불러오고 있습니다..."):
     drive_service = get_drive_service_from_secrets(key_dict)
+
+    # 📂 폴더 내부 디버깅 보기
+    with st.expander("📁 폴더 내부 파일 확인"):
+        result = drive_service.files().list(
+            q=f"'{folder_id}' in parents and trashed = false",
+            fields="files(id, name, mimeType)"
+        ).execute()
+        for f in result.get("files", []):
+            st.markdown(f"- **{f['name']}** ({f['mimeType']})")
+
+    # 주차별 텍스트 가져오기
     last_text, this_text = get_weekly_files(drive_service, folder_id, week_no)
 
 # ──────────────────────────────────────────────────────────────
