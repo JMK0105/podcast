@@ -13,55 +13,53 @@ from drive_handler import (
 )
 from gpt_brief import generate_brief
 from audio_utils import text_to_audio
+import base64
 
-import streamlit as st
-import pandas as pd
-import json
-import gspread
-from google.oauth2.service_account import Credentials
-
-# Google Sheets 연결
+# ──────────────────────────────────────────────────────────────
+# Google Sheets 정보 불러오기
+# ──────────────────────────────────────────────────────────────
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1WvPyKF1Enq4fqPHRtJi54SaklpQ54TNjcMicvaw6ZkA/edit?gid=0#gid=0"
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 key_dict = json.loads(st.secrets["gcp_tts_key"])
-scope = ["https://www.googleapis.com/auth/spreadsheets"]
-creds = Credentials.from_service_account_info(key_dict, scopes=scope)
+creds = Credentials.from_service_account_info(key_dict, scopes=SCOPES)
 gc = gspread.authorize(creds)
-ws = gc.open_by_url(SHEET_URL).sheet1
+sh = gc.open_by_url(SHEET_URL)
+ws = sh.sheet1
 
-# 사용자 데이터 불러오기
-df_users = pd.DataFrame(ws.get_all_records())
+# ──────────────────────────────────────────────────────────────
+# 사용자 로그인 흐름
+# ──────────────────────────────────────────────────────────────
+st.title("🎧 데일리 학습 브리핑 팟캐스트")
 
-# 1. 학번 입력 (초기 화면)
-st.title("🎧 데일리 학습 브리핑")
 user_id = st.text_input("📌 학번(ID)을 입력하세요")
-
 if not user_id:
     st.stop()
 
-# 2. 회원 여부 확인
+user_data = ws.get_all_records()
+df_users = pd.DataFrame(user_data)
+
 if "ID" in df_users.columns and user_id in df_users["ID"].astype(str).values:
     user_row = df_users[df_users["ID"].astype(str) == user_id].iloc[0]
     st.success(f"환영합니다, {user_row['이름']}님!")
-    # 이후 코드 진행 (브리핑 생성 등)
+    user_name = user_row["이름"]
+    user_grade = user_row["학년"]
+    user_major = user_row["전공"]
+    user_style = user_row["스타일"]
 else:
-    st.warning("등록된 정보가 없습니다. 회원가입이 필요합니다.")
+    st.warning("등록되지 않은 학번입니다. 아래에 정보를 입력해주세요.")
+    with st.form("register_form"):
+        st.subheader("👤 사용자 등록")
+        user_name = st.text_input("이름")
+        user_grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년"])
+        user_major = st.text_input("전공")
+        user_style = st.selectbox("학습 스타일", ["개념 중심", "사례 중심", "키워드 요약", "스토리텔링"])
+        submitted = st.form_submit_button("등록 완료")
 
-    # 3. 버튼을 눌러야 가입 폼 표시
-    if st.button("회원가입"):
-        with st.form("signup_form"):
-            st.subheader("👤 사용자 정보 입력")
-            user_name = st.text_input("이름")
-            user_grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년"])
-            user_major = st.text_input("전공")
-            user_style = st.selectbox("학습 스타일", ["개념 중심", "사례 중심", "키워드 요약", "스토리텔링"])
-            submitted = st.form_submit_button("가입 완료")
-
-        if submitted:
-            ws.append_row([user_id, user_name, user_grade, user_major, user_style])
-            st.success("✅ 가입이 완료되었습니다! 다시 학번을 입력해 주세요.")
-            st.stop()
-    else:
+    if not submitted:
         st.stop()
+    else:
+        ws.append_row([user_id, user_name, user_grade, user_major, user_style])
+        st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
 
 # ──────────────────────────────────────────────────────────────
 # 과목 선택 및 환경설정
@@ -92,7 +90,9 @@ with st.spinner("📂 강의자료를 불러오고 있습니다..."):
 if this_pdf_bytes:
     st.subheader("📑 이번주 강의자료 (PDF 미리보기)")
     st.download_button("📥 PDF 다운로드", data=this_pdf_bytes, file_name=f"{course_name}_{week_no}주차.pdf")
-    st.components.v1.iframe("data:application/pdf;base64," + this_pdf_bytes.getvalue().encode("base64").decode(), height=600)
+    base64_pdf = base64.b64encode(this_pdf_bytes.getvalue()).decode('utf-8')
+    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
+    st.markdown(pdf_display, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────────────────────
 # GPT + 오디오
@@ -100,7 +100,7 @@ if this_pdf_bytes:
 if this_text:
     with st.spinner("💬 GPT 브리핑 생성 중..."):
         last_brief, this_brief = generate_brief(
-            user_row["이름"], user_row["학년"], user_row["전공"], user_row["스타일"],
+            user_name, user_grade, user_major, user_style,
             last_week_text=last_text or "",
             this_week_text=this_text,
             subject_name=course_name
