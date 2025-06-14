@@ -1,8 +1,9 @@
-streamlit==1.34.0
-openai==1.30.1
-gtts==2.5.1
-pydrive2==1.17.0
-python-pptx==0.6.21
-PyMuPDF==1.23.22
-google-api-python-client==2.128.0
-google-auth==2.29.0
+streamlit
+openai
+gtts
+pydrive2
+python-pptx
+PyMuPDF
+google-api-python-client
+google-auth
+google-cloud-texttospeech
