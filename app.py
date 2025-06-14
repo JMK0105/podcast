@@ -13,7 +13,6 @@ from drive_handler import (
 )
 from gpt_brief import generate_brief
 from audio_utils import text_to_audio
-import base64
 
 # ──────────────────────────────────────────────────────────────
 # Google Sheets 정보 불러오기
@@ -31,45 +30,59 @@ ws = sh.sheet1
 # ──────────────────────────────────────────────────────────────
 st.title("🎧 데일리 학습 브리핑 팟캐스트")
 
-with st.form("login_form"):
-    user_id = st.text_input("📌 학번(ID)을 입력하세요")
-    login_submitted = st.form_submit_button("로그인")
+if "registered" not in st.session_state:
+    st.session_state.registered = False
 
-if not login_submitted or not user_id:
-    st.stop()
+if not st.session_state.registered:
+    with st.form("login_form"):
+        user_id = st.text_input("📌 학번(ID)을 입력하세요")
+        login_submitted = st.form_submit_button("로그인")
 
-user_data = ws.get_all_records()
-df_users = pd.DataFrame(user_data)
+    if not login_submitted or not user_id:
+        st.stop()
 
-if "ID" in df_users.columns and user_id in df_users["ID"].astype(str).values:
+    user_data = ws.get_all_records()
+    df_users = pd.DataFrame(user_data)
+
+    if "ID" in df_users.columns and user_id in df_users["ID"].astype(str).values:
+        user_row = df_users[df_users["ID"].astype(str) == user_id].iloc[0]
+        st.success(f"환영합니다, {user_row['이름']}님!")
+        user_name = user_row["이름"]
+        user_grade = user_row["학년"]
+        user_major = user_row["전공"]
+        user_style = user_row["스타일"]
+        st.session_state.registered = True
+    else:
+        st.warning("등록되지 않은 학번입니다. 아래에 정보를 입력해주세요.")
+        with st.form("register_form"):
+            st.subheader("👤 사용자 등록")
+            user_name = st.text_input("이름")
+            user_grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년"])
+            user_major = st.text_input("전공")
+            user_style = st.selectbox("학습 스타일", ["개념 중심", "사례 중심", "키워드 요약", "스토리텔링"])
+            submitted = st.form_submit_button("등록 완료")
+
+        if not submitted:
+            st.stop()
+        elif not user_name or not user_grade or not user_major or not user_style:
+            st.error("⚠️ 모든 정보를 입력해주세요.")
+            st.stop()
+        else:
+            try:
+                ws.append_row([user_id, user_name, user_grade, user_major, user_style])
+                st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
+                st.session_state.registered = True
+            except Exception as e:
+                st.error(f"❌ 등록 실패: {e}")
+                st.stop()
+else:
+    user_data = ws.get_all_records()
+    df_users = pd.DataFrame(user_data)
     user_row = df_users[df_users["ID"].astype(str) == user_id].iloc[0]
-    st.success(f"환영합니다, {user_row['이름']}님!")
     user_name = user_row["이름"]
     user_grade = user_row["학년"]
     user_major = user_row["전공"]
     user_style = user_row["스타일"]
-else:
-    st.warning("등록되지 않은 학번입니다. 아래에 정보를 입력해주세요.")
-    with st.form("register_form"):
-        st.subheader("👤 사용자 등록")
-        user_name = st.text_input("이름")
-        user_grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년"])
-        user_major = st.text_input("전공")
-        user_style = st.selectbox("학습 스타일", ["개념 중심", "사례 중심", "키워드 요약", "스토리텔링"])
-        submitted = st.form_submit_button("등록 완료")
-
-    if not submitted:
-        st.stop()
-    elif not user_name or not user_grade or not user_major or not user_style:
-        st.error("⚠️ 모든 정보를 입력해주세요.")
-        st.stop()
-    else:
-        try:
-            ws.append_row([user_id, user_name, user_grade, user_major, user_style])
-            st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
-        except Exception as e:
-            st.error(f"❌ 등록 실패: {e}")
-            st.stop()
 
 # ──────────────────────────────────────────────────────────────
 # 과목 선택 및 환경설정
@@ -98,11 +111,9 @@ with st.spinner("📂 강의자료를 불러오고 있습니다..."):
 # PDF 미리보기
 # ──────────────────────────────────────────────────────────────
 if this_pdf_bytes:
-    st.subheader("📑 이번주 강의자료 (PDF 미리보기)")
-    st.download_button("📥 PDF 다운로드", data=this_pdf_bytes, file_name=f"{course_name}_{week_no}주차.pdf")
-    base64_pdf = base64.b64encode(this_pdf_bytes.getvalue()).decode('utf-8')
-    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
-    st.markdown(pdf_display, unsafe_allow_html=True)
+    st.subheader("📑 이번주 강의자료 미리보기")
+    st.download_button("PDF 열기", data=this_pdf_bytes, file_name=f"{course_name}_{week_no}주차.pdf")
+    st.info("PDF 미리보기는 브라우저 보안 설정에 따라 차단될 수 있습니다. 위 버튼으로 열어주세요.")
 
 # ──────────────────────────────────────────────────────────────
 # GPT + 오디오
