@@ -31,8 +31,11 @@ ws = sh.sheet1
 # ──────────────────────────────────────────────────────────────
 st.title("🎧 데일리 학습 브리핑 팟캐스트")
 
-user_id = st.text_input("📌 학번(ID)을 입력하세요")
-if not user_id:
+with st.form("login_form"):
+    user_id = st.text_input("📌 학번(ID)을 입력하세요")
+    login_submitted = st.form_submit_button("로그인")
+
+if not login_submitted or not user_id:
     st.stop()
 
 user_data = ws.get_all_records()
