@@ -21,7 +21,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # Google Sheets 연결
-SHEET_URL = "https://docs.google.com/spreadsheets/d/xxxx/edit#gid=0"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1WvPyKF1Enq4fqPHRtJi54SaklpQ54TNjcMicvaw6ZkA/edit?gid=0#gid=0"
 key_dict = json.loads(st.secrets["gcp_tts_key"])
 scope = ["https://www.googleapis.com/auth/spreadsheets"]
 creds = Credentials.from_service_account_info(key_dict, scopes=scope)
