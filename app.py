@@ -1,4 +1,4 @@
-# app.py (과목 선택 + 디버깅 포함 + 텍스트 미리보기 + 1주차 예외처리)
+# app.py (과목 선택 + 디버깅 포함 + 텍스트 미리보기 + 1주차 예외처리 + 1주차 복습 생략)
 
 import streamlit as st
 from datetime import datetime
@@ -27,7 +27,9 @@ if not submitted:
 # 2. 과목 선택 + 환경설정 (secrets 기반)
 # ──────────────────────────────────────────────────────────────
 course_options = {
-    "학습과학": "1OpgPDpJmvSEy5RyWNiO-_x1Fcybf1ENH"
+    "교육공학": "1a2B3C_edu_folder_id",
+    "교육심리": "2d3E4F_psych_folder_id",
+    "학습과학": "PASTE_YOUR_ACTUAL_FOLDER_ID_HERE"
 }
 
 course_name = st.selectbox("🎓 오늘 들을 강의를 선택하세요", list(course_options.keys()))
@@ -86,13 +88,16 @@ if this_text:
         subject_name=course_name
     )
 
-    audio_last = text_to_audio(last_brief)
-    audio_last.seek(0)
     audio_this = text_to_audio(this_brief)
     audio_this.seek(0)
 
-    st.markdown("### 🔁 지난주차 복습 브리핑")
-    st.audio(audio_last, format="audio/mp3")
+    if week_no > 1 and last_text:
+        audio_last = text_to_audio(last_brief)
+        audio_last.seek(0)
+        st.markdown("### 🔁 지난주차 복습 브리핑")
+        st.audio(audio_last, format="audio/mp3")
+    elif week_no == 1:
+        st.info("이번이 첫 수업입니다 😊 복습 브리핑은 다음주부터 제공돼요!")
 
     st.markdown("### 🔮 이번주차 예습 브리핑")
     st.audio(audio_this, format="audio/mp3")
