@@ -1,40 +1,46 @@
-import openai
+# gpt_brief.py (OpenAI v1 SDK 호환 버전)
+
+from openai import OpenAI
 import os
 
-# ✅ OpenAI API 키 설정 (환경변수 또는 직접 입력)
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# ✅ OpenAI 클라이언트 초기화 (환경변수 기반)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-
-def generate_brief(user_name, user_grade, user_major, user_style, last_week_text, this_week_text, subject_name="수업"):
-    # 🔁 복습용 프롬프트
+def generate_brief(user_name, user_grade, user_major, user_style, last_week_text, this_week_text, subject_name):
+    # 지난주 요약
     last_prompt = f"""
-    당신은 대학생 '{user_grade}'학년 '{user_major}' 전공 학습자에게 친절하게 설명하는 에듀테크 AI입니다.
-    이 학습자는 '{user_style}' 스타일을 선호합니다.
+    당신은 친절한 학습 브리핑 챗봇입니다.
+    아래는 지난주 {subject_name} 수업의 강의자료입니다.
+    복습을 돕기 위해 핵심 내용을 요약하고, 다음 수업과 연결될 수 있는 한 가지 질문으로 마무리해주세요.
 
-    다음은 지난주 "{subject_name}" 수업의 강의자료입니다.
-    복습을 위해 지난 내용을 요약 정리하고, 핵심 개념을 간결하게 정리해주세요.
-    결론에 이번 내용을 간단히 되새기는 질문을 추가해주세요.
+    학습자 정보:
+    - 이름: {user_name}
+    - 학년: {user_grade}
+    - 전공: {user_major}
+    - 선호 스타일: {user_style}
 
     자료:
-    {last_week_text[:3500]}
+    {last_week_text[:4000]}
     """
 
-    # 🔮 예습용 프롬프트
+    # 이번주 예습 요약
     this_prompt = f"""
-    당신은 대학생 '{user_grade}'학년 '{user_major}' 전공 학습자에게 설명하는 에듀테크 AI입니다.
-    이 학습자는 '{user_style}' 스타일을 선호합니다.
+    당신은 학생의 예습을 돕는 에듀테크 AI입니다.
+    다음은 이번주 {subject_name} 수업의 강의자료입니다.
+    핵심 개념을 정리하고, 이번 수업에서 주목해야 할 포인트를 친근한 말투로 500자 내외로 정리해주세요. 마지막에 질문 한 개를 던져주세요.
 
-    다음은 오늘 들을 "{subject_name}" 수업의 강의자료입니다.
-    예습을 위해 핵심 개념을 정리하고, 어떤 주제에 주목하면 좋을지 알려주세요.
-    결론에는 흥미를 유도하는 질문을 추가해주세요.
+    학습자 정보:
+    - 이름: {user_name}
+    - 학년: {user_grade}
+    - 전공: {user_major}
+    - 선호 스타일: {user_style}
 
     자료:
-    {this_week_text[:3500]}
+    {this_week_text[:4000]}
     """
 
-    # GPT 요청
     def get_completion(prompt):
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": "너는 교육 브리핑 챗봇이야."},
@@ -47,5 +53,4 @@ def generate_brief(user_name, user_grade, user_major, user_style, last_week_text
 
     last_brief = get_completion(last_prompt)
     this_brief = get_completion(this_prompt)
-
     return last_brief, this_brief
