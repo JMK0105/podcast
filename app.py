@@ -23,7 +23,19 @@ key_dict = json.loads(st.secrets["gcp_tts_key"])
 creds = Credentials.from_service_account_info(key_dict, scopes=SCOPES)
 gc = gspread.authorize(creds)
 sh = gc.open_by_url(SHEET_URL)
-ws = sh.worksheet("user_data")  # ← 정확히 시트 이름 지정
+ws = sh.worksheet("user_data")
+
+# ✅ 사용자 정보 저장 함수
+def save_user_info(gc, user_id, user_name, user_grade, user_major, user_style):
+    try:
+        worksheet = gc.open_by_url(SHEET_URL).worksheet("user_data")
+        worksheet.append_row([
+            str(user_id), user_name, user_grade, user_major, user_style
+        ], value_input_option="USER_ENTERED")
+        return True
+    except Exception as e:
+        st.error(f"❌ 등록 실패: {e}")
+        return False
 
 # ──────────────────────────────────────────────────────────────
 # 사용자 로그인 흐름
@@ -72,20 +84,17 @@ if not st.session_state.registered:
             st.error("⚠️ 모든 정보를 입력해주세요.")
             st.stop()
         else:
-            try:
-                ws.append_row([user_id, user_name, user_grade, user_major, user_style])
+            if save_user_info(gc, user_id, user_name, user_grade, user_major, user_style):
                 st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
                 st.session_state.registered = True
-                st.session_state.user_id = user_id  # 이후 재호출용
-                st.rerun()  # 🔥 핵심: 저장 후 즉시 앱을 다시 실행시킴
-            except Exception as e:
-                st.error(f"❌ 등록 실패: {e}")
+                st.session_state.user_id = str(user_id)
+                st.rerun()
+            else:
                 st.stop()
-        
 else:
     user_data = ws.get_all_records()
     df_users = pd.DataFrame(user_data)
-    user_row = df_users[df_users["ID"].astype(str) == st.session_state.user_id].iloc[0]
+    user_row = df_users[df_users["ID"].astype(str) == str(st.session_state.user_id)].iloc[0]
     user_name = user_row["이름"]
     user_grade = user_row["학년"]
     user_major = user_row["전공"]
