@@ -36,6 +36,15 @@ folder_id = course_options[course_name]
 semester_start = datetime.strptime(st.secrets["semester_start"], "%Y-%m-%d").date()
 key_dict = json.loads(st.secrets["gcp_tts_key"])
 
+with st.expander("📁 폴더 내부 확인"):
+    result = drive_service.files().list(
+        q=f"'{folder_id}' in parents and trashed = false",
+        fields="files(id, name, mimeType)"
+    ).execute()
+    for f in result.get("files", []):
+        st.write(f["name"], f["mimeType"])
+
+
 # ──────────────────────────────────────────────────────────────
 # 3. 주차 계산 및 Drive 텍스트 추출
 # ──────────────────────────────────────────────────────────────
