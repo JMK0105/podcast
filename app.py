@@ -76,10 +76,12 @@ if not st.session_state.registered:
                 ws.append_row([user_id, user_name, user_grade, user_major, user_style])
                 st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
                 st.session_state.registered = True
-                st.session_state.user_id = user_id
+                st.session_state.user_id = user_id  # 이후 재호출용
+                st.rerun()  # 🔥 핵심: 저장 후 즉시 앱을 다시 실행시킴
             except Exception as e:
                 st.error(f"❌ 등록 실패: {e}")
                 st.stop()
+        
 else:
     user_data = ws.get_all_records()
     df_users = pd.DataFrame(user_data)
