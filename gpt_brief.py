@@ -2,29 +2,50 @@ import openai
 import os
 
 # ✅ OpenAI API 키 설정 (환경변수 또는 직접 입력)
-openai.api_key = os.getenv("OPENAI_API_KEY")  # 또는 직접 문자열로 입력
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
-def generate_briefing(text, subject_name):
-    prompt = f"""
-    당신은 학생의 예습을 돕는 에듀테크 AI입니다.
-    다음은 "{subject_name}" 수업의 강의자료입니다.
-    이 내용을 바탕으로 핵심 개념을 정리하고, 
-    오늘 수업에서 주목해야 할 포인트를 설명하는 예습용 브리핑을 500자 내외로 작성해주세요.
-    반드시 학생 친화적인 말투로 구성하고, 결론에 질문 하나를 던져주세요.
+def generate_brief(user_name, user_grade, user_major, user_style, last_week_text, this_week_text, subject_name="수업"):
+    # 🔁 복습용 프롬프트
+    last_prompt = f"""
+    당신은 대학생 '{user_grade}'학년 '{user_major}' 전공 학습자에게 친절하게 설명하는 에듀테크 AI입니다.
+    이 학습자는 '{user_style}' 스타일을 선호합니다.
+
+    다음은 지난주 "{subject_name}" 수업의 강의자료입니다.
+    복습을 위해 지난 내용을 요약 정리하고, 핵심 개념을 간결하게 정리해주세요.
+    결론에 이번 내용을 간단히 되새기는 질문을 추가해주세요.
 
     자료:
-    {text[:4000]}  # GPT 입력 토큰 제한 대비 슬라이싱
+    {last_week_text[:3500]}
     """
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "너는 교육 브리핑 챗봇이야."},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.7,
-        max_tokens=800,
-    )
+    # 🔮 예습용 프롬프트
+    this_prompt = f"""
+    당신은 대학생 '{user_grade}'학년 '{user_major}' 전공 학습자에게 설명하는 에듀테크 AI입니다.
+    이 학습자는 '{user_style}' 스타일을 선호합니다.
 
-    return response.choices[0].message.content.strip()
+    다음은 오늘 들을 "{subject_name}" 수업의 강의자료입니다.
+    예습을 위해 핵심 개념을 정리하고, 어떤 주제에 주목하면 좋을지 알려주세요.
+    결론에는 흥미를 유도하는 질문을 추가해주세요.
+
+    자료:
+    {this_week_text[:3500]}
+    """
+
+    # GPT 요청
+    def get_completion(prompt):
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "너는 교육 브리핑 챗봇이야."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+            max_tokens=800,
+        )
+        return response.choices[0].message.content.strip()
+
+    last_brief = get_completion(last_prompt)
+    this_brief = get_completion(this_prompt)
+
+    return last_brief, this_brief
