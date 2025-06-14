@@ -60,15 +60,22 @@ else:
 
     if not submitted:
         st.stop()
+    elif not user_name or not user_grade or not user_major or not user_style:
+        st.error("⚠️ 모든 정보를 입력해주세요.")
+        st.stop()
     else:
-        ws.append_row([user_id, user_name, user_grade, user_major, user_style])
-        st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
+        try:
+            ws.append_row([user_id, user_name, user_grade, user_major, user_style])
+            st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
+        except Exception as e:
+            st.error(f"❌ 등록 실패: {e}")
+            st.stop()
 
 # ──────────────────────────────────────────────────────────────
 # 과목 선택 및 환경설정
 # ──────────────────────────────────────────────────────────────
 course_options = {
-    "학습과학": "1OpgPDpJmvSEy5RyWNiO-_x1Fcybf1ENH",
+    "학습과학": "1OpgPDpJmvSEy5RyWNiO-_x1Fcybf1ENH"
 }
 course_name = st.selectbox("🎓 오늘 들을 강의를 선택하세요", list(course_options.keys()))
 folder_id = course_options[course_name]
