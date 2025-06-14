@@ -23,7 +23,7 @@ key_dict = json.loads(st.secrets["gcp_tts_key"])
 creds = Credentials.from_service_account_info(key_dict, scopes=SCOPES)
 gc = gspread.authorize(creds)
 sh = gc.open_by_url(SHEET_URL)
-ws = sh.sheet1
+ws = sh.worksheet("user_data")  # ← 정확히 시트 이름 지정
 
 # ──────────────────────────────────────────────────────────────
 # 사용자 로그인 흐름
