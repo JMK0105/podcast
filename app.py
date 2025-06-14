@@ -33,14 +33,18 @@ st.title("🎧 데일리 학습 브리핑 팟캐스트")
 if "registered" not in st.session_state:
     st.session_state.registered = False
 
+if "user_id" not in st.session_state:
+    st.session_state.user_id = ""
+
 if not st.session_state.registered:
     with st.form("login_form"):
-        user_id = st.text_input("📌 학번(ID)을 입력하세요")
+        user_id = st.text_input("📌 학번(ID)을 입력하세요", value=st.session_state.user_id)
         login_submitted = st.form_submit_button("로그인")
 
     if not login_submitted or not user_id:
         st.stop()
 
+    st.session_state.user_id = user_id
     user_data = ws.get_all_records()
     df_users = pd.DataFrame(user_data)
 
@@ -72,13 +76,14 @@ if not st.session_state.registered:
                 ws.append_row([user_id, user_name, user_grade, user_major, user_style])
                 st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
                 st.session_state.registered = True
+                st.session_state.user_id = user_id
             except Exception as e:
                 st.error(f"❌ 등록 실패: {e}")
                 st.stop()
 else:
     user_data = ws.get_all_records()
     df_users = pd.DataFrame(user_data)
-    user_row = df_users[df_users["ID"].astype(str) == user_id].iloc[0]
+    user_row = df_users[df_users["ID"].astype(str) == st.session_state.user_id].iloc[0]
     user_name = user_row["이름"]
     user_grade = user_row["학년"]
     user_major = user_row["전공"]
@@ -88,6 +93,7 @@ else:
 # 과목 선택 및 환경설정
 # ──────────────────────────────────────────────────────────────
 course_options = {
+    "교육공학": "1k_0XbQO3Jjr1Adgb8XVeqUOX-m1DAh77",
     "학습과학": "1OpgPDpJmvSEy5RyWNiO-_x1Fcybf1ENH"
 }
 course_name = st.selectbox("🎓 오늘 들을 강의를 선택하세요", list(course_options.keys()))
@@ -108,12 +114,12 @@ with st.spinner("📂 강의자료를 불러오고 있습니다..."):
     )
 
 # ──────────────────────────────────────────────────────────────
-# PDF 미리보기
+# PDF 다운로드 (미리보기는 브라우저에 따라 차단될 수 있음)
 # ──────────────────────────────────────────────────────────────
 if this_pdf_bytes:
-    st.subheader("📑 이번주 강의자료 미리보기")
-    st.download_button("PDF 열기", data=this_pdf_bytes, file_name=f"{course_name}_{week_no}주차.pdf")
-    st.info("PDF 미리보기는 브라우저 보안 설정에 따라 차단될 수 있습니다. 위 버튼으로 열어주세요.")
+    st.subheader("📑 이번주 강의자료 다운로드")
+    st.download_button("PDF 다운로드", data=this_pdf_bytes, file_name=f"{course_name}_{week_no}주차.pdf")
+    st.info("PDF 미리보기는 보안 설정에 따라 차단될 수 있어 다운로드 버튼을 제공합니다.")
 
 # ──────────────────────────────────────────────────────────────
 # GPT + 오디오
