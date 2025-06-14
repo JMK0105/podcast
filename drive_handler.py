@@ -1,8 +1,9 @@
-# drive_handler.py (서비스 계정 기반)
+# drive_handler.py (정규화 기반 파일명 비교 개선)
 
 import datetime
 import fitz  # PyMuPDF
 import io
+import unicodedata
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 
@@ -20,21 +21,29 @@ def get_current_week(start_date: datetime.date, today: datetime.date) -> int:
     return ((today - start_date).days // 7) + 1
 
 # ─────────────────────────────────────────────
-# 3. 해당 주차/지난주차 PDF 텍스트 추출
+# 3. 문자열 정규화 (공백 제거 + 소문자 + 유니코드 통일)
+# ─────────────────────────────────────────────
+def normalize(text):
+    return unicodedata.normalize('NFKC', text).replace(" ", "").lower()
+
+# ─────────────────────────────────────────────
+# 4. 해당 주차/지난주차 PDF 텍스트 추출
 # ─────────────────────────────────────────────
 def get_weekly_files(service, folder_id, week_num):
     def get_text_from_week(week_keyword):
-        query = f"'{folder_id}' in parents and name contains '{week_keyword}' and trashed = false"
+        query = f"'{folder_id}' in parents and trashed = false"
         results = service.files().list(q=query, fields="files(id, name, mimeType)").execute()
         files = results.get("files", [])
 
         for file in files:
+            filename = file["name"]
             if "pdf" in file["mimeType"]:
-                file_id = file["id"]
-                request = service.files().get_media(fileId=file_id)
-                file_bytes = io.BytesIO(request.execute())
-                doc = fitz.open("pdf", file_bytes.read())
-                return "\n".join([page.get_text() for page in doc])
+                if normalize(week_keyword) in normalize(filename):
+                    file_id = file["id"]
+                    request = service.files().get_media(fileId=file_id)
+                    file_bytes = io.BytesIO(request.execute())
+                    doc = fitz.open("pdf", file_bytes.read())
+                    return "\n".join([page.get_text() for page in doc])
         return None
 
     this_week_text = get_text_from_week(f"{week_num}주차")
