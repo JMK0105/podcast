@@ -5,7 +5,7 @@ from io import BytesIO
 import streamlit as st
 
 # 텍스트를 TTS로 변환하고 오디오 스트림 반환
-def text_to_audio(text, json_key_path="gcp_tts_key.json", voice_name="ko-KR-Wavenet-B"):
+def text_to_audio(text, json_key_path="gcp_tts_key", voice_name="ko-KR-Wavenet-B"):
     # 인증 및 클라이언트 생성
     client = texttospeech.TextToSpeechClient.from_service_account_file(json_key_path)
 
