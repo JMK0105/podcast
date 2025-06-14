@@ -3,54 +3,89 @@ import fitz  # PyMuPDF
 from pptx import Presentation
 import io
 
+
 # ------------------ 주차 계산 ------------------ #
 def get_current_week(start_date: datetime.date, today: datetime.date) -> int:
     return ((today - start_date).days // 7) + 1
 
-# ------------------ Google Drive 탐색 ------------------ #
-def get_week_folder_file(service, parent_folder_id, today):
-    # 예: 학기 시작일
-    semester_start = datetime.date(2025, 3, 4)
-    week_num = get_current_week(semester_start, today.date())
+
+# ------------------ 주차 강의자료 파일 불러오기 ------------------ #
+def get_weekly_files(drive, week_num: int, folder_id="YOUR_PARENT_FOLDER_ID"):
     week_name = f"{week_num}주차"
 
-    # 주차 폴더 검색
-    folder_query = f"'{parent_folder_id}' in parents and title = '{week_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-    folder_list = service.files().list(q=folder_query).execute().get('items', [])
+    # 1. 주차 폴더 검색
+    folder_list = drive.ListFile({
+        'q': f"'{folder_id}' in parents and title contains '{week_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    }).GetList()
 
     if not folder_list:
-        return None
+        return None, None
 
     week_folder_id = folder_list[0]['id']
 
-    # 강의자료 파일 검색 (PDF 또는 PPTX 우선)
-    file_query = f"'{week_folder_id}' in parents and (mimeType contains 'pdf' or mimeType contains 'presentation') and trashed = false"
-    file_list = service.files().list(q=file_query).execute().get('items', [])
+    # 2. 폴더 내 강의자료 검색 (PDF, PPTX, DOCX)
+    file_list = drive.ListFile({
+        'q': f"'{week_folder_id}' in parents and trashed = false"
+    }).GetList()
 
-    return file_list[0] if file_list else None
+    # 3. 파일 내용 추출 함수 호출
+    def find_first_text_file(files):
+        for file in files:
+            name = file['title'].lower()
+            if name.endswith(".pdf") or name.endswith(".pptx") or name.endswith(".docx"):
+                return file
+        return None
+
+    # 이번 주차 + 지난 주차 기준
+    this_week_file = find_first_text_file(file_list)
+
+    # 지난 주차 자료도 함께 불러오기
+    last_week_file = None
+    if week_num > 1:
+        last_folder_name = f"{week_num - 1}주차"
+        last_folders = drive.ListFile({
+            'q': f"'{folder_id}' in parents and title contains '{last_folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+        }).GetList()
+        if last_folders:
+            last_folder_id = last_folders[0]['id']
+            last_files = drive.ListFile({
+                'q': f"'{last_folder_id}' in parents and trashed = false"
+            }).GetList()
+            last_week_file = find_first_text_file(last_files)
+
+    # 텍스트 추출
+    last_text = extract_text_from_file(last_week_file) if last_week_file else None
+    this_text = extract_text_from_file(this_week_file) if this_week_file else None
+
+    return last_text, this_text
 
 
 # ------------------ 파일 내용 텍스트 추출 ------------------ #
-def extract_text_from_file(service, file_metadata):
-    file_id = file_metadata['id']
-    file_name = file_metadata['title']
-    mime_type = file_metadata['mimeType']
+def extract_text_from_file(file):
+    if not file:
+        return None
 
-    file = service.files().get_media(fileId=file_id).execute()
-    file_stream = io.BytesIO(file)
+    file_name = file['title'].lower()
+    file.GetContentFile(file_name)
 
-    if 'pdf' in mime_type:
-        doc = fitz.open(stream=file_stream.read(), filetype="pdf")
-        text = "".join(page.get_text() for page in doc)
+    if file_name.endswith(".pdf"):
+        doc = fitz.open(file_name)
+        text = "".join([page.get_text() for page in doc])
         return text
 
-    elif 'presentation' in mime_type:
-        prs = Presentation(file_stream)
+    elif file_name.endswith(".pptx"):
+        prs = Presentation(file_name)
         text = ""
         for slide in prs.slides:
             for shape in slide.shapes:
                 if hasattr(shape, "text"):
                     text += shape.text + "\n"
+        return text
+
+    elif file_name.endswith(".docx"):
+        import docx
+        doc = docx.Document(file_name)
+        text = "\n".join([para.text for para in doc.paragraphs])
         return text
 
     return None
