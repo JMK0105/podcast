@@ -1,4 +1,4 @@
-# app.py (서비스 계정 기반 리팩터링)
+# app.py (과목 선택 포함 리팩터링)
 
 import streamlit as st
 from datetime import datetime
@@ -24,10 +24,16 @@ if not submitted:
     st.stop()
 
 # ──────────────────────────────────────────────────────────────
-# 2. 환경설정 (secrets.toml 기반)
+# 2. 과목 선택 + 환경설정 (secrets 기반)
 # ──────────────────────────────────────────────────────────────
+course_options = {
+    "학습과학": "1OpgPDpJmvSEy5RyWNiO-_x1Fcybf1ENH"
+}
+
+course_name = st.selectbox("🎓 오늘 들을 강의를 선택하세요", list(course_options.keys()))
+folder_id = course_options[course_name]
+
 semester_start = datetime.strptime(st.secrets["semester_start"], "%Y-%m-%d").date()
-folder_id = st.secrets["drive_folder_id"]
 key_dict = json.loads(st.secrets["gcp_tts_key"])
 
 # ──────────────────────────────────────────────────────────────
@@ -36,7 +42,7 @@ key_dict = json.loads(st.secrets["gcp_tts_key"])
 today = datetime.today()
 week_no = get_current_week(semester_start, today.date())
 
-st.info(f"📅 오늘은 {today.strftime('%Y-%m-%d')} / 학기 {week_no}주차입니다.")
+st.info(f"📅 오늘은 {today.strftime('%Y-%m-%d')} / 학기 {week_no}주차입니다.\n📘 선택한 과목: {course_name}")
 
 with st.spinner("📂 강의자료를 불러오고 있습니다..."):
     drive_service = get_drive_service_from_secrets(key_dict)
@@ -56,7 +62,7 @@ if last_text and this_text:
         user_style=user_style,
         last_week_text=last_text,
         this_week_text=this_text,
-        subject_name="교육공학"
+        subject_name=course_name
     )
 
     # 오디오 생성
