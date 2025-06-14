@@ -26,39 +26,38 @@ sh = gc.open_by_url(SHEET_URL)
 ws = sh.sheet1
 
 # ──────────────────────────────────────────────────────────────
-# 사용자 로그인
+# 사용자 정보 입력 (통합 입력 폼)
 # ──────────────────────────────────────────────────────────────
 st.title("🎧 데일리 학습 브리핑 팟캐스트")
 
-user_id = st.text_input("📌 학번(ID)을 입력하세요")
-if not user_id:
+with st.form("user_login"):
+    st.subheader("👤 사용자 정보 입력")
+    user_id = st.text_input("📌 학번(ID)")
+    user_name = st.text_input("이름")
+    user_grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년"])
+    user_major = st.text_input("전공")
+    user_style = st.selectbox("학습 스타일", ["개념 중심", "사례 중심", "키워드 요약", "스토리텔링"])
+    submitted = st.form_submit_button("입력 완료")
+
+if not submitted:
     st.stop()
 
 user_data = ws.get_all_records()
 df_users = pd.DataFrame(user_data)
 
-if user_id in df_users["ID"].values:
-    user_row = df_users[df_users["ID"] == user_id].iloc[0]
-    user_name = user_row["이름"]
-    user_grade = user_row["학년"]
-    user_major = user_row["전공"]
-    user_style = user_row["스타일"]
-    st.success(f"환영합니다, {user_name}님!")
+if user_id in df_users["ID"].astype(str).values:
+    user_row = df_users[df_users["ID"].astype(str) == user_id].iloc[0]
 else:
-    with st.form("user_form"):
-        st.subheader("👤 최초 사용자 정보 입력")
-        user_name = st.text_input("이름")
-        user_grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년"])
-        user_major = st.text_input("전공")
-        user_style = st.selectbox("학습 스타일", ["개념 중심", "사례 중심", "키워드 요약", "스토리텔링"])
-        submitted = st.form_submit_button("정보 저장")
+    ws.append_row([user_id, user_name, user_grade, user_major, user_style])
+    user_row = {
+        "ID": user_id,
+        "이름": user_name,
+        "학년": user_grade,
+        "전공": user_major,
+        "스타일": user_style
+    }
 
-    if submitted:
-        ws.append_row([user_id, user_name, user_grade, user_major, user_style])
-        st.success("✅ 정보가 저장되었습니다! 페이지를 새로고침해주세요.")
-        st.stop()
-    else:
-        st.stop()
+st.success(f"환영합니다, {user_row['이름']}님!")
 
 # ──────────────────────────────────────────────────────────────
 # 과목 선택 및 환경설정
@@ -97,7 +96,7 @@ if this_pdf_bytes:
 if this_text:
     with st.spinner("💬 GPT 브리핑 생성 중..."):
         last_brief, this_brief = generate_brief(
-            user_name, user_grade, user_major, user_style,
+            user_row["이름"], user_row["학년"], user_row["전공"], user_row["스타일"],
             last_week_text=last_text or "",
             this_week_text=this_text,
             subject_name=course_name
