@@ -3,6 +3,7 @@ from google.oauth2.service_account import Credentials
 import io
 import json
 import streamlit as st
+import re
 
 # ✅ Google TTS 클라이언트 생성 (서비스 계정 명시적으로 전달)
 def get_tts_client():
@@ -10,13 +11,26 @@ def get_tts_client():
     creds = Credentials.from_service_account_info(key_dict)
     return texttospeech.TextToSpeechClient(credentials=creds)
 
+# ✅ 특수기호 및 이모지 제거
+
+def clean_text_for_tts(text):
+    # 이모지 제거
+    text = re.sub(r'[^\u0000-\u007F\uAC00-\uD7A3\u3130-\u318F]+', ' ', text)
+    # 일반 특수기호 제거
+    text = re.sub(r'[•★☆※◆■□○●◎◇…→←↑↓※!@#$%^&*()_+=~`<>/\\|{}\[\]"\']+', ' ', text)
+    # 중복 공백 제거
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
 # ✅ 텍스트를 MP3 오디오로 변환
 
 def text_to_audio(text):
     try:
         client = get_tts_client()
 
-        input_text = texttospeech.SynthesisInput(text=text)
+        cleaned_text = clean_text_for_tts(text)
+
+        input_text = texttospeech.SynthesisInput(text=cleaned_text)
 
         voice = texttospeech.VoiceSelectionParams(
             language_code="ko-KR",
