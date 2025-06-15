@@ -13,35 +13,17 @@ from drive_handler import (
 )
 from gpt_brief import generate_brief
 from audio_utils import text_to_audio
-import requests
 
 # ──────────────────────────────────────────────────────────────
 # Google Sheets 정보 불러오기
 # ──────────────────────────────────────────────────────────────
-SHEET_ID = "1WvPyKF1Enq4fqPHRtJi54SaklpQ54TNjcMicvaw6ZkA"
-SHEET_NAME = "user_data"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1WvPyKF1Enq4fqPHRtJi54SaklpQ54TNjcMicvaw6ZkA/edit?gid=0#gid=0"
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 key_dict = json.loads(st.secrets["gcp_tts_key"])
 creds = Credentials.from_service_account_info(key_dict, scopes=SCOPES)
 gc = gspread.authorize(creds)
-sh = gc.open_by_key(SHEET_ID)
-ws = sh.worksheet(SHEET_NAME)
-
-# ✅ 대안 저장 함수 (Google Sheets API 직접 호출)
-def append_user_row_direct(sheet_id, values, creds):
-    url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{SHEET_NAME}!A1:append"
-    params = {
-        "valueInputOption": "USER_ENTERED"
-    }
-    headers = {
-        "Authorization": f"Bearer {creds.token}",
-        "Content-Type": "application/json"
-    }
-    body = {
-        "values": [values]
-    }
-    response = requests.post(url, headers=headers, params=params, json=body)
-    return response.status_code == 200
+sh = gc.open_by_url(SHEET_URL)
+ws = sh.worksheet("user_data")  # ← 정확히 시트 이름 지정
 
 # ──────────────────────────────────────────────────────────────
 # 사용자 로그인 흐름
@@ -78,6 +60,7 @@ if not st.session_state.registered:
         st.warning("등록되지 않은 학번입니다. 아래에 정보를 입력해주세요.")
         with st.form("register_form"):
             st.subheader("👤 사용자 등록")
+            st.markdown(f"**학번(ID)**: `{st.session_state.user_id}`")  # 학번은 표시만
             user_name = st.text_input("이름")
             user_grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년"])
             user_major = st.text_input("전공")
@@ -90,17 +73,19 @@ if not st.session_state.registered:
             st.error("⚠️ 모든 정보를 입력해주세요.")
             st.stop()
         else:
-            success = append_user_row_direct(
-                sheet_id=SHEET_ID,
-                values=[user_id, user_name, user_grade, user_major, user_style],
-                creds=creds
-            )
-            if success:
+            try:
+                ws.append_row([
+                    st.session_state.user_id,
+                    user_name,
+                    user_grade,
+                    user_major,
+                    user_style
+                ])
                 st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
                 st.session_state.registered = True
                 st.rerun()
-            else:
-                st.error("❌ 저장 실패: Google API 오류")
+            except Exception as e:
+                st.error(f"❌ 등록 실패: {e}")
                 st.stop()
 
 else:
