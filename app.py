@@ -50,6 +50,9 @@ if not st.session_state.registered:
 
     if is_existing_user(df_users, user_id):
         user_row = get_user_row(df_users, user_id)
+        if user_row is None:
+            st.error("❌ 사용자 정보를 찾을 수 없습니다. 다시 시도해 주세요.")
+            st.stop()
         st.success(f"환영합니다, {user_row['이름']}님!")
         user_name = user_row["이름"]
         user_grade = user_row["학년"]
@@ -85,6 +88,10 @@ if not st.session_state.registered:
 else:
     df_users = get_user_df(ws)
     user_row = get_user_row(df_users, st.session_state.user_id)
+    if user_row is None:
+        st.error("❌ 사용자 정보를 찾을 수 없습니다. 다시 로그인해주세요.")
+        st.session_state.registered = False
+        st.stop()
     user_name = user_row["이름"]
     user_grade = user_row["학년"]
     user_major = user_row["전공"]

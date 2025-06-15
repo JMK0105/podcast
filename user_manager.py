@@ -16,6 +16,30 @@ def get_user_df(worksheet):
 def is_existing_user(df, user_id):
     return "ID" in df.columns and user_id in df["ID"].astype(str).values
 
+# 특정 사용자의 정보를 포함한 DataFrame 행을 반환
+def get_user_row(df, user_id):
+    """Return the row in ``df`` that matches ``user_id``.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        DataFrame containing user information.
+    user_id : str or int
+        Identifier of the user to look up.
+
+    Returns
+    -------
+    pandas.Series or None
+        The first matching row as a Series if found, otherwise ``None``.
+    """
+    if "ID" not in df.columns:
+        return None
+
+    matches = df[df["ID"].astype(str) == str(user_id)]
+    if not matches.empty:
+        return matches.iloc[0]
+    return None
+
 # 사용자 row 반환
 def register_user(ws, user_id, name, grade, major, style):
     try:
