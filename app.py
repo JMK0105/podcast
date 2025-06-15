@@ -23,7 +23,7 @@ key_dict = json.loads(st.secrets["gcp_tts_key"])
 creds = Credentials.from_service_account_info(key_dict, scopes=SCOPES)
 gc = gspread.authorize(creds)
 sh = gc.open_by_url(SHEET_URL)
-ws = sh.worksheet("user_data")  # ← 정확히 시트 이름 지정
+ws = sh.worksheet("user_data")
 
 # ──────────────────────────────────────────────────────────────
 # 사용자 로그인 흐름
@@ -35,6 +35,9 @@ if "registered" not in st.session_state:
 
 if "user_id" not in st.session_state:
     st.session_state.user_id = ""
+
+if "just_registered" not in st.session_state:
+    st.session_state.just_registered = False
 
 if not st.session_state.registered:
     with st.form("login_form"):
@@ -60,7 +63,7 @@ if not st.session_state.registered:
         st.warning("등록되지 않은 학번입니다. 아래에 정보를 입력해주세요.")
         with st.form("register_form"):
             st.subheader("👤 사용자 등록")
-            st.markdown(f"**학번(ID)**: `{st.session_state.user_id}`")  # 학번은 표시만
+            reg_user_id = st.text_input("📌 학번(ID)", value=st.session_state.user_id)
             user_name = st.text_input("이름")
             user_grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년"])
             user_major = st.text_input("전공")
@@ -69,26 +72,25 @@ if not st.session_state.registered:
 
         if not submitted:
             st.stop()
-        elif not user_name or not user_grade or not user_major or not user_style:
+        elif not reg_user_id or not user_name or not user_grade or not user_major or not user_style:
             st.error("⚠️ 모든 정보를 입력해주세요.")
             st.stop()
         else:
             try:
-                ws.append_row([
-                    st.session_state.user_id,
-                    user_name,
-                    user_grade,
-                    user_major,
-                    user_style
-                ])
-                st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
+                ws.append_row([reg_user_id, user_name, user_grade, user_major, user_style])
                 st.session_state.registered = True
+                st.session_state.user_id = reg_user_id
+                st.session_state.just_registered = True
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ 등록 실패: {e}")
                 st.stop()
 
 else:
+    if st.session_state.just_registered:
+        st.success(f"✅ {st.session_state.user_id}님, 등록이 완료되었습니다!")
+        st.session_state.just_registered = False
+
     user_data = ws.get_all_records()
     df_users = pd.DataFrame(user_data)
     user_row = df_users[df_users["ID"].astype(str) == st.session_state.user_id].iloc[0]
