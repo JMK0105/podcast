@@ -13,6 +13,7 @@ from drive_handler import (
 )
 from gpt_brief import generate_brief
 from audio_utils import text_to_audio
+from user_manager import get_user_df, is_existing_user, get_user_row, register_user
 
 # ──────────────────────────────────────────────────────────────
 # Google Sheets 정보 불러오기
@@ -36,9 +37,6 @@ if "registered" not in st.session_state:
 if "user_id" not in st.session_state:
     st.session_state.user_id = ""
 
-if "just_registered" not in st.session_state:
-    st.session_state.just_registered = False
-
 if not st.session_state.registered:
     with st.form("login_form"):
         user_id = st.text_input("📌 학번(ID)을 입력하세요", value=st.session_state.user_id)
@@ -48,11 +46,10 @@ if not st.session_state.registered:
         st.stop()
 
     st.session_state.user_id = user_id
-    user_data = ws.get_all_records()
-    df_users = pd.DataFrame(user_data)
+    df_users = get_user_df(ws)
 
-    if "ID" in df_users.columns and user_id in df_users["ID"].astype(str).values:
-        user_row = df_users[df_users["ID"].astype(str) == user_id].iloc[0]
+    if is_existing_user(df_users, user_id):
+        user_row = get_user_row(df_users, user_id)
         st.success(f"환영합니다, {user_row['이름']}님!")
         user_name = user_row["이름"]
         user_grade = user_row["학년"]
@@ -63,7 +60,7 @@ if not st.session_state.registered:
         st.warning("등록되지 않은 학번입니다. 아래에 정보를 입력해주세요.")
         with st.form("register_form"):
             st.subheader("👤 사용자 등록")
-            reg_user_id = st.text_input("📌 학번(ID)", value=st.session_state.user_id)
+            user_id = st.text_input("📌 학번(ID)", value=user_id)
             user_name = st.text_input("이름")
             user_grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년"])
             user_major = st.text_input("전공")
@@ -72,28 +69,22 @@ if not st.session_state.registered:
 
         if not submitted:
             st.stop()
-        elif not reg_user_id or not user_name or not user_grade or not user_major or not user_style:
+        elif not user_id or not user_name or not user_grade or not user_major or not user_style:
             st.error("⚠️ 모든 정보를 입력해주세요.")
             st.stop()
         else:
-            try:
-                ws.append_row([reg_user_id, user_name, user_grade, user_major, user_style])
+            if register_user(ws, user_id, user_name, user_grade, user_major, user_style):
+                st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
                 st.session_state.registered = True
-                st.session_state.user_id = reg_user_id
-                st.session_state.just_registered = True
+                st.session_state.user_id = user_id
                 st.rerun()
-            except Exception as e:
-                st.error(f"❌ 등록 실패: {e}")
+            else:
+                st.error("❌ 등록 실패")
                 st.stop()
 
 else:
-    if st.session_state.just_registered:
-        st.success(f"✅ {st.session_state.user_id}님, 등록이 완료되었습니다!")
-        st.session_state.just_registered = False
-
-    user_data = ws.get_all_records()
-    df_users = pd.DataFrame(user_data)
-    user_row = df_users[df_users["ID"].astype(str) == st.session_state.user_id].iloc[0]
+    df_users = get_user_df(ws)
+    user_row = get_user_row(df_users, st.session_state.user_id)
     user_name = user_row["이름"]
     user_grade = user_row["학년"]
     user_major = user_row["전공"]
@@ -124,7 +115,7 @@ with st.spinner("📂 강의자료를 불러오고 있습니다..."):
     )
 
 # ──────────────────────────────────────────────────────────────
-# PDF 다운로드 (미리보기는 브라우저에 따라 차단될 수 있음)
+# PDF 다운로드
 # ──────────────────────────────────────────────────────────────
 if this_pdf_bytes:
     st.subheader("📑 이번주 강의자료 다운로드")
