@@ -1,33 +1,46 @@
 from google.cloud import texttospeech
 from io import BytesIO
 import streamlit as st
-import json
 
-def text_to_audio(text, json_key=None, voice_name="ko-KR-Wavenet-B"):
-    # ✅ secrets.toml에 저장된 키를 불러옴
-    if json_key is None:
-        json_key = json.loads(st.secrets["gcp_tts_key"])  # 문자열 → dict 변환
+def text_to_audio(text: str):
+    """
+    주어진 텍스트를 Google TTS를 사용해 오디오로 변환
+    :param text: 브리핑 텍스트
+    :return: MP3 BytesIO 객체 or None
+    """
 
-    # ✅ from_service_account_info 사용 (파일이 아니라 dict)
-    client = texttospeech.TextToSpeechClient.from_service_account_info(json_key)
+    try:
+        if not text.strip():
+            return None
 
-    synthesis_input = texttospeech.SynthesisInput(text=text)
+        # 1. TTS 클라이언트 생성
+        client = texttospeech.TextToSpeechClient()
 
-    voice = texttospeech.VoiceSelectionParams(
-        language_code="ko-KR",
-        name=voice_name,
-        ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL,
-    )
+        # 2. 입력 텍스트 (최대 길이 제한 적용)
+        synthesis_input = texttospeech.SynthesisInput(text=text[:4999])
 
-    audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.MP3
-    )
+        # 3. 음성 설정 (한국어, 중성 음색)
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="ko-KR",
+            ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
+        )
 
-    response = client.synthesize_speech(
-        input=synthesis_input,
-        voice=voice,
-        audio_config=audio_config,
-    )
+        # 4. 출력 오디오 형식
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3
+        )
 
-    mp3_fp = BytesIO(response.audio_content)
-    return mp3_fp
+        # 5. TTS 요청 실행
+        response = client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config
+        )
+
+        # 6. Streamlit에 맞게 BytesIO 변환
+        audio_stream = BytesIO(response.audio_content)
+        return audio_stream
+
+    except Exception as e:
+        st.error(f"❌ 오디오 생성 실패: {e}")
+        return None
