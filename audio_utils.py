@@ -1,45 +1,39 @@
 from google.cloud import texttospeech
-from io import BytesIO
+from google.oauth2.service_account import Credentials
+import io
+import json
 import streamlit as st
 
-def text_to_audio(text: str):
-    """
-    주어진 텍스트를 Google TTS를 사용해 오디오로 변환
-    :param text: 브리핑 텍스트
-    :return: MP3 BytesIO 객체 or None
-    """
+# ✅ Google TTS 클라이언트 생성 (서비스 계정 명시적으로 전달)
+def get_tts_client():
+    key_dict = json.loads(st.secrets["gcp_tts_key"])
+    creds = Credentials.from_service_account_info(key_dict)
+    return texttospeech.TextToSpeechClient(credentials=creds)
 
+# ✅ 텍스트를 MP3 오디오로 변환
+
+def text_to_audio(text):
     try:
-        if not text.strip():
-            return None
+        client = get_tts_client()
 
-        # 1. TTS 클라이언트 생성
-        client = texttospeech.TextToSpeechClient()
+        input_text = texttospeech.SynthesisInput(text=text)
 
-        # 2. 입력 텍스트 (최대 길이 제한 적용)
-        synthesis_input = texttospeech.SynthesisInput(text=text[:4999])
-
-        # 3. 음성 설정 (한국어, 중성 음색)
         voice = texttospeech.VoiceSelectionParams(
             language_code="ko-KR",
             ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
         )
 
-        # 4. 출력 오디오 형식
         audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3
         )
 
-        # 5. TTS 요청 실행
         response = client.synthesize_speech(
-            input=synthesis_input,
+            input=input_text,
             voice=voice,
             audio_config=audio_config
         )
 
-        # 6. Streamlit에 맞게 BytesIO 변환
-        audio_stream = BytesIO(response.audio_content)
-        return audio_stream
+        return io.BytesIO(response.audio_content)
 
     except Exception as e:
         st.error(f"❌ 오디오 생성 실패: {e}")
