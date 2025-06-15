@@ -1,5 +1,3 @@
-# app.py
-
 import streamlit as st
 from datetime import datetime
 import json
@@ -16,9 +14,9 @@ from audio_utils import text_to_audio
 from user_manager import get_user_df, is_existing_user, get_user_row, register_user
 
 # ──────────────────────────────────────────────────────────────
-# Google Sheets 정보 불러오기
+# Google Sheets 연결
 # ──────────────────────────────────────────────────────────────
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1WvPyKF1Enq4fqPHRtJi54SaklpQ54TNjcMicvaw6ZkA/edit?gid=0#gid=0"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1WvPyKF1Enq4fqPHRtJi54SaklpQ54TNjcMicvaw6ZkA/edit#gid=0"
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 key_dict = json.loads(st.secrets["gcp_tts_key"])
 creds = Credentials.from_service_account_info(key_dict, scopes=SCOPES)
@@ -27,16 +25,20 @@ sh = gc.open_by_url(SHEET_URL)
 ws = sh.worksheet("user_data")
 
 # ──────────────────────────────────────────────────────────────
-# 사용자 로그인 흐름
+# 세션 초기화
 # ──────────────────────────────────────────────────────────────
 st.title("🎧 데일리 학습 브리핑 팟캐스트")
 
 if "registered" not in st.session_state:
     st.session_state.registered = False
-
 if "user_id" not in st.session_state:
     st.session_state.user_id = ""
+if "user_info" not in st.session_state:
+    st.session_state.user_info = {}
 
+# ──────────────────────────────────────────────────────────────
+# 로그인 또는 회원가입
+# ──────────────────────────────────────────────────────────────
 if not st.session_state.registered:
     with st.form("login_form"):
         user_id = st.text_input("📌 학번(ID)을 입력하세요", value=st.session_state.user_id)
@@ -50,12 +52,19 @@ if not st.session_state.registered:
 
     if is_existing_user(df_users, user_id):
         user_row = get_user_row(df_users, user_id)
+        if user_row is None:
+            st.error("❌ 사용자 정보를 불러오는 데 실패했습니다.")
+            st.stop()
+
         st.success(f"환영합니다, {user_row['이름']}님!")
-        user_name = user_row["이름"]
-        user_grade = user_row["학년"]
-        user_major = user_row["전공"]
-        user_style = user_row["스타일"]
+        st.session_state.user_info = {
+            "이름": user_row["이름"],
+            "학년": user_row["학년"],
+            "전공": user_row["전공"],
+            "스타일": user_row["스타일"]
+        }
         st.session_state.registered = True
+        st.rerun()
     else:
         st.warning("등록되지 않은 학번입니다. 아래에 정보를 입력해주세요.")
         with st.form("register_form"):
@@ -74,21 +83,27 @@ if not st.session_state.registered:
             st.stop()
         else:
             if register_user(ws, user_id, user_name, user_grade, user_major, user_style):
-                st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
                 st.session_state.registered = True
                 st.session_state.user_id = user_id
+                st.session_state.user_info = {
+                    "이름": user_name,
+                    "학년": user_grade,
+                    "전공": user_major,
+                    "스타일": user_style
+                }
+                st.success("✅ 등록이 완료되었습니다! 계속 진행해주세요.")
                 st.rerun()
             else:
                 st.error("❌ 등록 실패")
                 st.stop()
 
-else:
-    df_users = get_user_df(ws)
-    user_row = get_user_row(df_users, st.session_state.user_id)
-    user_name = user_row["이름"]
-    user_grade = user_row["학년"]
-    user_major = user_row["전공"]
-    user_style = user_row["스타일"]
+# ──────────────────────────────────────────────────────────────
+# 사용자 정보 불러오기
+# ──────────────────────────────────────────────────────────────
+user_name = st.session_state.user_info.get("이름", "")
+user_grade = st.session_state.user_info.get("학년", "")
+user_major = st.session_state.user_info.get("전공", "")
+user_style = st.session_state.user_info.get("스타일", "")
 
 # ──────────────────────────────────────────────────────────────
 # 과목 선택 및 환경설정
@@ -123,7 +138,7 @@ if this_pdf_bytes:
     st.info("PDF 미리보기는 보안 설정에 따라 차단될 수 있어 다운로드 버튼을 제공합니다.")
 
 # ──────────────────────────────────────────────────────────────
-# GPT + 오디오
+# GPT 브리핑 + 오디오 변환
 # ──────────────────────────────────────────────────────────────
 if this_text:
     with st.spinner("💬 GPT 브리핑 생성 중..."):
