@@ -2,7 +2,6 @@ import streamlit as st
 from datetime import datetime
 import json
 from google.oauth2.service_account import Credentials
-import gspread
 from drive_handler import (
     get_drive_service_from_secrets, 
     get_current_week, 
@@ -39,7 +38,7 @@ with st.form("user_form"):
     submitted = st.form_submit_button("🎧 브리핑 듣기")
 
 # ──────────────────────────────────────────────────────────────
-# 브리핑 생성
+# 브리핑 생성 및 오디오 출력
 # ──────────────────────────────────────────────────────────────
 if submitted:
     if not name or not major:
@@ -51,15 +50,14 @@ if submitted:
     today = datetime.today()
     week_no = get_current_week(semester_start, today.date())
 
-    st.info(f"📅 오늘은 {today.strftime('%Y-%m-%d')} / {week_no}주차")
+    st.success(f"📅 오늘은 {today.strftime('%Y-%m-%d')} / {week_no}주차입니다!")
 
-    with st.spinner("📂 강의자료를 불러오는 중..."):
-        last_text, this_text, _ = get_weekly_files_with_binary(
-            drive_service, folder_id, week_no
-        )
+    # 이번 주차 불러오기
+    with st.spinner("📂 이번 주차 강의자료 불러오는 중..."):
+        last_text, this_text, _ = get_weekly_files_with_binary(drive_service, folder_id, week_no)
 
     if this_text:
-        with st.spinner("💬 GPT 브리핑 생성 중..."):
+        with st.spinner("💬 이번 주차 GPT 브리핑 생성 중..."):
             last_brief, this_brief = generate_brief(
                 name, grade, major, style,
                 last_week_text=last_text or "",
@@ -71,13 +69,41 @@ if submitted:
             audio_this = text_to_audio(this_brief)
             audio_this.seek(0)
 
+            st.markdown("### 🔮 이번주차 예습 브리핑")
+            st.audio(audio_this, format="audio/mp3")
+
             if week_no > 1 and last_text:
                 audio_last = text_to_audio(last_brief)
                 audio_last.seek(0)
                 st.markdown("### 🔁 지난주차 복습 브리핑")
                 st.audio(audio_last, format="audio/mp3")
-
-            st.markdown("### 🔮 이번주차 예습 브리핑")
-            st.audio(audio_this, format="audio/mp3")
     else:
-        st.error("❌ 강의자료를 불러올 수 없습니다.")
+        st.error("❌ 이번 주차 강의자료를 불러올 수 없습니다.")
+        st.stop()
+
+    # 이전 주차 브리핑 선택 영역
+    if week_no > 1:
+        st.markdown("---")
+        st.markdown("## ⏪ 이전 주차 브리핑 듣기")
+        for past_week in range(1, week_no):
+            with st.expander(f"🔊 {past_week}주차 예습 브리핑"):
+                with st.spinner(f"📂 {past_week}주차 강의자료 불러오는 중..."):
+                    _, prev_text, _ = get_weekly_files_with_binary(drive_service, folder_id, past_week)
+
+                if prev_text:
+                    with st.spinner("💬 GPT 브리핑 생성 중..."):
+                        _, prev_brief = generate_brief(
+                            name, grade, major, style,
+                            last_week_text="",  # 복습 생략
+                            this_week_text=prev_text,
+                            subject_name=course_name
+                        )
+
+                    with st.spinner("🎧 오디오 변환 중..."):
+                        audio_prev = text_to_audio(prev_brief)
+                        audio_prev.seek(0)
+
+                        st.audio(audio_prev, format="audio/mp3")
+                else:
+                    st.warning("⚠️ 이 주차의 강의자료를 찾을 수 없습니다.")
+
