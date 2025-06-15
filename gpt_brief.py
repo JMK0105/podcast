@@ -2,7 +2,7 @@ import streamlit as st
 from openai import OpenAI
 
 # OpenAI 클라이언트 초기화
-client = OpenAI(api_key=st.secrets["openai_api_key"])
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 def generate_brief(name, grade, major, style, last_week_text, this_week_text, subject_name):
     this_week_text = this_week_text[:5000]
