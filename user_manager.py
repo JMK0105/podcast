@@ -17,16 +17,12 @@ def is_existing_user(df, user_id):
     return "ID" in df.columns and user_id in df["ID"].astype(str).values
 
 # 사용자 row 반환
-def get_user_row(df, user_id):
-    return df[df["ID"].astype(str) == user_id].iloc[0]
-
-# 신규 사용자 정보 시트에 추가
-def register_user(worksheet, user_id, name, grade, major, style):
+def register_user(ws, user_id, name, grade, major, style):
     try:
-        row = [user_id, name, grade, major, style]
-        worksheet.append_row(row)
-        print(f"[register_user] 등록 완료: {row}")
+        st.info(f"✅ 저장 시도: {[user_id, name, grade, major, style]}")
+        ws.append_row([user_id, name, grade, major, style])
+        st.success("✅ Google 시트에 저장 성공")
         return True
     except Exception as e:
-        print(f"[register_user] 등록 실패: {e}")
+        st.error(f"❌ Google 시트 저장 실패: {e}")
         return False
